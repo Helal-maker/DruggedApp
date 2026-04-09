@@ -8,16 +8,17 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#ffffff",
+      "imageWidth": 1024
     },
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
@@ -25,10 +26,19 @@
       "package": "com.anonymous.DruggedApp"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       "expo-font"
     ]
+  },
+  "expo-splash-screen": {
+    "backgroundColor": "#FFFFFF",
+    "image": "./assets/images/splash-icon.png",
+    "dark": {
+      "image": "./assets/images/splash-icon-dark.png",
+      "backgroundColor": "#000000"
+    },
+    "imageWidth": 1024
   }
 }
