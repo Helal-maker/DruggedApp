@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "DruggedApp",
-    "slug": "DruggedApp",
+    "slug": "drug-otc",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -30,7 +30,13 @@
     },
     "plugins": [
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "28368ae8-0ddc-4af0-b3fe-812f88265d0f"
+      }
+    },
+    "owner": "orynos-organization"
   },
   "expo-splash-screen": {
     "backgroundColor": "#FFFFFF",
