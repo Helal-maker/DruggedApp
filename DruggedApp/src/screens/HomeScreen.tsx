@@ -5,13 +5,15 @@ import {
   StyleSheet,
   ScrollView,
   SafeAreaView,
+  TouchableOpacity,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { PillBadge, SymptomCard } from '../components';
-import { colors, spacing, typography } from '../theme';
+import { colors, spacing, typography, borderRadius } from '../theme';
 import { getSymptomsList } from '../services/constraintEngine';
 
 type RootStackParamList = {
+  SectionSelect: undefined;
   Home: undefined;
   UserInfo: { symptom: string };
   Results: { symptom: string; age: number; sex: string; pregnancy: boolean };
@@ -46,6 +48,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.navigate('SectionSelect')}
+          >
+            <Text style={styles.backText}>‹ Select Section</Text>
+          </TouchableOpacity>
           <Text style={styles.title}>What brings you here?</Text>
           <Text style={styles.subtitle}>
             Select your main symptom
@@ -85,6 +93,14 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: spacing.xl,
+  },
+  backButton: {
+    marginBottom: spacing.sm,
+  },
+  backText: {
+    ...typography.body,
+    color: colors.primary.green,
+    fontWeight: '600',
   },
   title: {
     ...typography.h1,

@@ -1,3 +1,6 @@
 export { HomeScreen } from './HomeScreen';
 export { UserInfoScreen } from './UserInfoScreen';
 export { ResultsScreen } from './ResultsScreen';
+export { SectionSelectScreen } from './SectionSelectScreen';
+export { DrugSearchScreen } from './DrugSearchScreen';
+export { DrugSearchResultsScreen } from './DrugSearchResultsScreen';

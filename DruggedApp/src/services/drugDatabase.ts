@@ -1,0 +1,191 @@
+import { Platform } from 'react-native';
+import { copyAsync, documentDirectory } from 'expo-file-system/legacy';
+import * as SQLite from 'expo-sqlite';
+import { Asset } from 'expo-asset';
+
+export interface Drug {
+  id: number;
+  trade_name: string;
+  active_ingredient: string;
+  price: number;
+  price_old: number | null;
+  manufacturer: string | null;
+  distributor: string | null;
+  category: string | null;
+  subcategory: string | null;
+  subcategory2: string | null;
+  route: string | null;
+  search_index: string | null;
+}
+
+// Web fallback (5 sample drugs)
+
+const WEB_SAMPLE: Drug[] = [
+  { id: 1, trade_name: "PANADOL", active_ingredient: "PARACETAMOL", price: 45, price_old: 55, manufacturer: "GSK", distributor: "Pharco", category: "ANALGESIC", subcategory: "NON-OPIOID", subcategory2: "ANTIPYRETIC", route: "ORAL.SOLID", search_index: "PANADOL PARACETAMOL" },
+  { id: 2, trade_name: "BRUFEN", active_ingredient: "IBUPROFEN", price: 55, price_old: 45, manufacturer: "Abbott", distributor: "Pharco", category: "NSAID", subcategory: "PROPIONIC ACID DERIVATIVES", subcategory2: null, route: "ORAL.SOLID", search_index: "BRUFEN IBUPROFEN" },
+  { id: 3, trade_name: "AMOXIL", active_ingredient: "AMOXICILLIN", price: 95, price_old: 110, manufacturer: "Pfizer", distributor: "Pharco", category: "ANTIBIOTIC", subcategory: "PENICILLINS", subcategory2: null, route: "ORAL.SOLID", search_index: "AMOXIL AMOXICILLIN" },
+  { id: 4, trade_name: "VOLTAREN", active_ingredient: "DICLOFENAC SODIUM", price: 120, price_old: null, manufacturer: "Novartis", distributor: "Pharco", category: "NSAID", subcategory: "ACETIC ACID DERIVATIVES", subcategory2: null, route: "ORAL.SOLID", search_index: "VOLTAREN DICLOFENAC" },
+  { id: 5, trade_name: "OMEPRAZOLE", active_ingredient: "OMEPRAZOLE", price: 85, price_old: 100, manufacturer: "AstraZeneca", distributor: "Pharco", category: "PEPTIC ULCER", subcategory: "PROTON PUMP INHIBITOR", subcategory2: null, route: "ORAL.SOLID", search_index: "OMEPRAZOLE ACID" },
+];
+
+// Native SQLite
+
+const DB_NAME = 'drugged.db';
+let db: SQLite.SQLiteDatabase | null = null;
+
+async function copyDatabaseIfNeeded(): Promise<void> {
+  const destPath = documentDirectory + DB_NAME;
+
+  const destInfo = await import('expo-file-system/legacy').then(fs => fs.getInfoAsync(destPath));
+  if (destInfo.exists) return;
+
+  const asset = Asset.fromModule(require('../assets/drugged.db'));
+  await asset.downloadAsync();
+
+  if (!asset.localUri) throw new Error('Failed to load drugged.db asset');
+
+  await copyAsync({
+    from: asset.localUri,
+    to: destPath,
+  });
+}
+
+async function getNativeDb(): Promise<SQLite.SQLiteDatabase> {
+  if (db) return db;
+  await copyDatabaseIfNeeded();
+  db = await SQLite.openDatabaseAsync(documentDirectory + DB_NAME);
+  return db;
+}
+
+// Public API
+
+export async function initDatabase(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  await getNativeDb();
+}
+
+export async function searchDrugs(query: string): Promise<Drug[]> {
+  const q = query.trim();
+  if (!q) return [];
+
+  // DEBUG: Log platform and query
+  console.log('[DEBUG] Platform.OS:', Platform.OS);
+  console.log('[DEBUG] Query:', q);
+  console.log('[DEBUG] WEB_SAMPLE length:', WEB_SAMPLE.length);
+
+  if (Platform.OS === 'web') {
+    const lower = q.toLowerCase();
+    const results = WEB_SAMPLE.filter(d =>
+      d.trade_name?.toLowerCase().includes(lower) ||
+      d.active_ingredient?.toLowerCase().includes(lower)
+    );
+    console.log('[DEBUG] Web results:', results.length);
+    return results;
+  }
+
+  const db = await getNativeDb();
+  const pattern = `%${q}%`;
+
+  return db.getAllAsync<Drug>(
+    `SELECT * FROM drugs
+     WHERE trade_name LIKE ?
+        OR active_ingredient LIKE ?
+        OR search_index LIKE ?
+     ORDER BY
+       CASE WHEN trade_name LIKE ? THEN 0 ELSE 1 END,
+       trade_name
+     LIMIT 50`,
+    [pattern, pattern, pattern, `${q}%`]
+  );
+}
+
+export async function getDrugById(id: number): Promise<Drug | null> {
+  if (Platform.OS === 'web') {
+    return WEB_SAMPLE.find(d => d.id === id) ?? null;
+  }
+  const db = await getNativeDb();
+  return db.getFirstAsync<Drug>('SELECT * FROM drugs WHERE id = ?', [id]);
+}
+
+export async function getDrugsByActiveIngredient(ingredient: string): Promise<Drug[]> {
+  if (Platform.OS === 'web') {
+    return WEB_SAMPLE
+      .filter(d => d.active_ingredient?.toLowerCase() === ingredient.toLowerCase())
+      .sort((a, b) => a.price - b.price);
+  }
+  const db = await getNativeDb();
+  return db.getAllAsync<Drug>(
+    'SELECT * FROM drugs WHERE active_ingredient = ? ORDER BY price ASC',
+    [ingredient]
+  );
+}
+
+export async function getAlternativeDrugs(drugId: number): Promise<Drug[]> {
+  if (Platform.OS === 'web') {
+    const drug = WEB_SAMPLE.find(d => d.id === drugId);
+    if (!drug) return [];
+    return WEB_SAMPLE
+      .filter(d => d.active_ingredient === drug.active_ingredient && d.id !== drugId)
+      .sort((a, b) => a.price - b.price);
+  }
+  const db = await getNativeDb();
+  const source = await db.getFirstAsync<{ active_ingredient: string }>(
+    'SELECT active_ingredient FROM drugs WHERE id = ?', [drugId]
+  );
+  if (!source?.active_ingredient) return [];
+
+  return db.getAllAsync<Drug>(
+    `SELECT * FROM drugs
+     WHERE active_ingredient = ? AND id != ?
+     ORDER BY price ASC`,
+    [source.active_ingredient, drugId]
+  );
+}
+
+export async function getDrugsByCategory(category: string, limit = 50): Promise<Drug[]> {
+  if (Platform.OS === 'web') {
+    return WEB_SAMPLE.filter(d => d.category === category).slice(0, limit);
+  }
+  const db = await getNativeDb();
+  return db.getAllAsync<Drug>(
+    'SELECT * FROM drugs WHERE category = ? ORDER BY trade_name LIMIT ?',
+    [category, limit]
+  );
+}
+
+export async function getCategories(): Promise<{ category: string; count: number }[]> {
+  if (Platform.OS === 'web') {
+    return [{ category: 'ANALGESIC', count: 1 }, { category: 'NSAID', count: 2 }];
+  }
+  const db = await getNativeDb();
+  return db.getAllAsync<{ category: string; count: number }>(
+    `SELECT category, COUNT(*) as count FROM drugs
+     WHERE category IS NOT NULL
+     GROUP BY category
+     ORDER BY count DESC`
+  );
+}
+
+export async function getPriceDrops(limit = 20): Promise<Drug[]> {
+  if (Platform.OS === 'web') {
+    return WEB_SAMPLE
+      .filter(d => d.price_old && d.price_old > d.price)
+      .sort((a, b) => (b.price_old! - b.price) - (a.price_old! - a.price))
+      .slice(0, limit);
+  }
+  const db = await getNativeDb();
+  return db.getAllAsync<Drug>(
+    `SELECT * FROM drugs
+     WHERE price_old IS NOT NULL AND price_old > price
+     ORDER BY (price_old - price) DESC
+     LIMIT ?`,
+    [limit]
+  );
+}
+
+export async function getDrugCount(): Promise<number> {
+  if (Platform.OS === 'web') return WEB_SAMPLE.length;
+  const db = await getNativeDb();
+  const result = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM drugs');
+  return result?.count ?? 0;
+}
