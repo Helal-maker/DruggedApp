@@ -136,17 +136,20 @@ export const DrugSearchResultsScreen: React.FC<DrugSearchResultsScreenProps> = (
         </View>
       </View>
 
-      <FlatList
-        data={drugs}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => renderDrugCard(item)}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No drugs found</Text>
-          </View>
-        }
-      />
+      <View style={{ flex: 1 }}>
+        <FlatList
+          data={drugs}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={({ item }) => renderDrugCard(item)}
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>No drugs found</Text>
+            </View>
+          }
+        />
+      </View>
     </SafeAreaView>
   );
 };
@@ -202,6 +205,7 @@ const styles = StyleSheet.create({
   listContent: {
     padding: spacing.lg,
     paddingTop: 0,
+    paddingBottom: spacing.xl,
   },
   drugCard: {
     backgroundColor: colors.neutral.white,

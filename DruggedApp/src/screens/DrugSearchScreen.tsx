@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -48,6 +48,16 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
   const [drugCount, setDrugCount] = useState<number>(0);
   const inputRef = useRef<TextInput>(null);
 
+  useEffect(() => {
+    const init = async () => {
+      await initDatabase();
+      const count = await getDrugCount();
+      setDrugCount(count);
+      console.log('[Mount] Total drugs in DB:', count);
+    };
+    init();
+  }, []);
+
   const currentMode = SEARCH_MODES.find(m => m.value === searchField)!;
 
   const handleSearch = async (searchQuery?: string) => {
@@ -58,11 +68,6 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
     setResults([]);
     setError(null);
     try {
-      console.log('[Search] Initializing database...');
-      await initDatabase();
-      const count = await getDrugCount();
-      setDrugCount(count);
-      console.log('[Search] Total drugs in DB:', count);
       console.log('[Search] Searching for:', q.trim(), 'in field:', searchField);
       const searchResults = await searchDrugs(q.trim(), searchField);
       console.log('[Search] Found results:', searchResults.length);
@@ -86,7 +91,22 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
       style={styles.quickSearchButton}
       onPress={() => {
         setQuery(searchTerm);
-        setTimeout(() => handleSearch(searchTerm), 100);
+        setTimeout(async () => {
+          setLoading(true);
+          setResults([]);
+          setError(null);
+          try {
+            console.log('[QuickSearch] Searching for:', searchTerm.trim(), 'in field: all');
+            const searchResults = await searchDrugs(searchTerm.trim(), 'all');
+            console.log('[QuickSearch] Found results:', searchResults.length);
+            setResults(searchResults);
+          } catch (error) {
+            console.error('[QuickSearch] Error:', error);
+            setError(String(error));
+          } finally {
+            setLoading(false);
+          }
+        }, 100);
       }}
     >
       <Text style={styles.quickSearchText}>{title}</Text>
@@ -171,8 +191,14 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
               <FlatList
                 data={results.slice(0, 5)}
                 keyExtractor={(item) => item.id.toString()}
+                nestedScrollEnabled={true}
+                scrollEnabled={false}
                 renderItem={({ item }) => (
-                  <View style={styles.resultItem}>
+                  <TouchableOpacity
+                    style={styles.resultItem}
+                    onPress={() => navigation.navigate('DrugSearchResults', { drugs: results, query })}
+                    activeOpacity={0.7}
+                  >
                     <Text style={styles.resultName}>{item.trade_name}</Text>
                     <Text style={styles.resultIngredient}>
                       {item.active_ingredient}
@@ -190,7 +216,7 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
                         </Text>
                       )}
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 )}
               />
               <TouchableOpacity
