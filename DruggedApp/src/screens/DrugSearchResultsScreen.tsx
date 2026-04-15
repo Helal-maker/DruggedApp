@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ type RootStackParamList = {
   Results: { symptom: string; age: number; sex: string; pregnancy: boolean };
   DrugSearch: undefined;
   DrugSearchResults: { drugs: Drug[]; query: string };
+  DrugDetail: { drug: Drug };
   Disclaimer: undefined;
 };
 
@@ -34,18 +35,26 @@ export const DrugSearchResultsScreen: React.FC<DrugSearchResultsScreenProps> = (
 }) => {
   const { drugs, query } = route.params;
 
-  const formatPrice = (price: number) => {
+  const formatPrice = useCallback((price: number) => {
     return `EGP ${price.toFixed(2)}`;
-  };
+  }, []);
 
-  const renderDrugCard = (drug: Drug) => {
+  const renderDrugCard = useCallback((drug: Drug) => {
     const hasDiscount = drug.price_old && drug.price_old > drug.price;
     const discountPercent = hasDiscount
       ? Math.round(((drug.price_old! - drug.price) / drug.price_old!) * 100)
       : 0;
 
+    const handlePress = () => {
+      navigation.navigate('DrugDetail', { drug });
+    };
+
     return (
-      <View key={drug.id} style={styles.drugCard}>
+      <TouchableOpacity
+        style={styles.drugCard}
+        onPress={handlePress}
+        activeOpacity={0.7}
+      >
         <View style={styles.drugHeader}>
           <Text style={styles.drugName}>{drug.trade_name}</Text>
           {hasDiscount && (
@@ -57,54 +66,32 @@ export const DrugSearchResultsScreen: React.FC<DrugSearchResultsScreenProps> = (
 
         <Text style={styles.drugIngredient}>{drug.active_ingredient}</Text>
 
-        <View style={styles.drugDetails}>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Price:</Text>
-            <View style={styles.priceContainer}>
-              <Text style={styles.currentPrice}>{formatPrice(drug.price)}</Text>
-              {hasDiscount && (
-                <Text style={styles.oldPrice}>{formatPrice(drug.price_old!)}</Text>
-              )}
-            </View>
-          </View>
-
-          {drug.manufacturer && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Manufacturer:</Text>
-              <Text style={styles.detailValue}>{drug.manufacturer}</Text>
-            </View>
-          )}
-
-          {drug.distributor && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Distributor:</Text>
-              <Text style={styles.detailValue}>{drug.distributor}</Text>
-            </View>
-          )}
-
-          {drug.category && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Category:</Text>
-              <Text style={styles.detailValue}>{drug.category}</Text>
-            </View>
-          )}
-
-          {drug.route && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Route:</Text>
-              <Text style={styles.detailValue}>{drug.route}</Text>
-            </View>
+        <View style={styles.priceRow}>
+          <Text style={styles.currentPrice}>{formatPrice(drug.price)}</Text>
+          {hasDiscount && (
+            <Text style={styles.oldPrice}>{formatPrice(drug.price_old!)}</Text>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
     );
-  };
+  }, [formatPrice, navigation]);
 
-  const uniqueIngredients = [...new Set(drugs.map((d) => d.active_ingredient))];
-  const priceRange = {
+  // Calculate fixed item height for getItemLayout (matches drugCard style + margin)
+  const ITEM_HEIGHT = 110; // Reduced height for minimal cards
+  const getItemLayout = useCallback((data: ArrayLike<Drug> | null | undefined, index: number) => ({
+    length: ITEM_HEIGHT,
+    offset: ITEM_HEIGHT * index,
+    index,
+  }), []);
+
+  const uniqueIngredients = useMemo(() => 
+    [...new Set(drugs.map((d) => d.active_ingredient))]
+  , [drugs]);
+
+  const priceRange = useMemo(() => ({
     min: Math.min(...drugs.map((d) => d.price)),
     max: Math.max(...drugs.map((d) => d.price)),
-  };
+  }), [drugs]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -143,6 +130,12 @@ export const DrugSearchResultsScreen: React.FC<DrugSearchResultsScreenProps> = (
           renderItem={({ item }) => renderDrugCard(item)}
           style={{ flex: 1 }}
           contentContainerStyle={styles.listContent}
+          removeClippedSubviews={true}
+          initialNumToRender={10}
+          maxToRenderPerBatch={5}
+          windowSize={10}
+          nestedScrollEnabled={true}
+          getItemLayout={getItemLayout}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>No drugs found</Text>
@@ -239,29 +232,12 @@ const styles = StyleSheet.create({
   drugIngredient: {
     ...typography.body,
     color: colors.neutral.gray,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
-  drugDetails: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border.light,
-    paddingTop: spacing.sm,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing.xs,
-  },
-  detailLabel: {
-    ...typography.small,
-    color: colors.neutral.gray,
-  },
-  detailValue: {
-    ...typography.small,
-    fontWeight: '600',
-  },
-  priceContainer: {
+  priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.sm,
   },
   currentPrice: {
     ...typography.body,
@@ -272,7 +248,6 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.neutral.gray,
     textDecorationLine: 'line-through',
-    marginLeft: spacing.sm,
   },
   emptyState: {
     padding: spacing.xl,

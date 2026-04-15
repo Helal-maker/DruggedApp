@@ -19,13 +19,16 @@ type RootStackParamList = {
   Home: undefined;
   UserInfo: { symptom: string };
   Results: { symptom: string; age: number; sex: string; pregnancy: boolean };
-  DrugSearch: undefined;
+  DrugSearch: { drugCount: number };
   DrugSearchResults: { drugs: Drug[]; query: string };
   Disclaimer: undefined;
 };
 
+import { RouteProp } from '@react-navigation/native';
+
 type DrugSearchScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'DrugSearch'>;
+  route: RouteProp<RootStackParamList, 'DrugSearch'>;
 };
 
 const SEARCH_MODES: { label: string; value: SearchField; placeholder: string }[] = [
@@ -39,26 +42,44 @@ const SEARCH_MODES: { label: string; value: SearchField; placeholder: string }[]
 
 export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
   navigation,
+  route,
 }) => {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<Drug[]>([]);
   const [searchField, setSearchField] = useState<SearchField>('all');
   const [error, setError] = useState<string | null>(null);
-  const [drugCount, setDrugCount] = useState<number>(0);
+  const drugCount = route.params?.drugCount ?? 0;
   const inputRef = useRef<TextInput>(null);
-
-  useEffect(() => {
-    const init = async () => {
-      await initDatabase();
-      const count = await getDrugCount();
-      setDrugCount(count);
-      console.log('[Mount] Total drugs in DB:', count);
-    };
-    init();
-  }, []);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const currentMode = SEARCH_MODES.find(m => m.value === searchField)!;
+
+  // Debounce search query changes
+  useEffect(() => {
+    // Clear any existing pending search
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // Don't search for empty queries
+    if (!query.trim()) {
+      setResults([]);
+      return;
+    }
+
+    // Schedule new search after 300ms delay
+    searchTimeoutRef.current = setTimeout(() => {
+      handleSearch(query);
+    }, 300);
+
+    // Cleanup timeout on unmount or when query changes
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [query, searchField]);
 
   const handleSearch = async (searchQuery?: string) => {
     const q = searchQuery || query;

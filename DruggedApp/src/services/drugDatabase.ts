@@ -77,7 +77,76 @@ async function getNativeDb(): Promise<SQLite.SQLiteDatabase> {
 }
 
 export async function initDatabase(): Promise<void> {
-  await getNativeDb();
+  const database = await getNativeDb();
+  
+  try {
+    // Check if FTS5 is available first
+    await database.execAsync('SELECT fts5()');
+    
+    // Create FTS5 virtual table for full-text search if it doesn't exist
+    await database.execAsync(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS drugs_fts USING fts5(
+        trade_name,
+        active_ingredient,
+        category,
+        subcategory,
+        manufacturer,
+        distributor,
+        route,
+        search_index,
+        content='drugs',
+        content_rowid='id',
+        tokenize='unicode61 remove_diacritics 2'
+      );
+    `);
+    
+    // Populate FTS index with existing data (only runs once)
+    const indexExists = await database.getFirstAsync<{ count: number }>(
+      'SELECT COUNT(*) as count FROM drugs_fts'
+    );
+    
+    if (!indexExists || indexExists.count === 0) {
+      await database.execAsync(`
+        INSERT INTO drugs_fts(rowid, trade_name, active_ingredient, category, subcategory,
+                             manufacturer, distributor, route, search_index)
+        SELECT id, trade_name, active_ingredient, category, subcategory,
+               manufacturer, distributor, route, search_index
+        FROM drugs;
+      `);
+    }
+    
+    // Create triggers to automatically keep FTS index in sync
+    await database.execAsync(`
+      CREATE TRIGGER IF NOT EXISTS drugs_fts_insert AFTER INSERT ON drugs BEGIN
+        INSERT INTO drugs_fts(rowid, trade_name, active_ingredient, category, subcategory,
+                             manufacturer, distributor, route, search_index)
+        VALUES (new.id, new.trade_name, new.active_ingredient, new.category, new.subcategory,
+                new.manufacturer, new.distributor, new.route, new.search_index);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS drugs_fts_update AFTER UPDATE ON drugs BEGIN
+        UPDATE drugs_fts SET
+          trade_name = new.trade_name,
+          active_ingredient = new.active_ingredient,
+          category = new.category,
+          subcategory = new.subcategory,
+          manufacturer = new.manufacturer,
+          distributor = new.distributor,
+          route = new.route,
+          search_index = new.search_index
+        WHERE rowid = new.id;
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS drugs_fts_delete AFTER DELETE ON drugs BEGIN
+        DELETE FROM drugs_fts WHERE rowid = old.id;
+      END;
+    `);
+    
+    console.log('[DB] FTS5 initialized successfully');
+  } catch (error) {
+    console.warn('[DB] FTS5 not available, falling back to standard search:', error);
+    // FTS5 not available - continue without it, search function will use LIKE fallback
+  }
 }
 
 export async function searchDrugs(
@@ -90,9 +159,59 @@ export async function searchDrugs(
   console.log('[DEBUG] Platform.OS:', Platform.OS, '| field:', field, '| query:', q);
 
   const database = await getNativeDb();
+  
+  // Check if FTS5 table exists first
+  let ftsAvailable = false;
+  try {
+    const ftsCheck = await database.getFirstAsync<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='drugs_fts'"
+    );
+    ftsAvailable = !!ftsCheck;
+  } catch (e) {
+    ftsAvailable = false;
+  }
+
+  if (ftsAvailable) {
+    // Escape FTS special characters and prepare search term
+    const ftsTerm = q.replace(/[*+'"():]/g, ' ').trim().replace(/\s+/g, '* ') + '*';
+    
+    let querySQL: string;
+    let params: string[];
+
+    try {
+      if (field === 'all') {
+        querySQL = `
+          SELECT d.* FROM drugs d
+          JOIN drugs_fts fts ON d.id = fts.rowid
+          WHERE drugs_fts MATCH ?
+          ORDER BY bm25(drugs_fts, 1, 2, 4, 3, 5, 6, 7, 8), trade_name
+          LIMIT 50
+        `;
+        params = [ftsTerm];
+      } else {
+        querySQL = `
+          SELECT d.* FROM drugs d
+          JOIN drugs_fts fts ON d.id = fts.rowid
+          WHERE ${field} MATCH ?
+          ORDER BY bm25(drugs_fts), trade_name
+          LIMIT 50
+        `;
+        params = [ftsTerm];
+      }
+
+      console.log('[DB] Executing FTS5 query');
+      const results = await database.getAllAsync<Drug>(querySQL, params);
+      console.log('[DB] FTS Results:', results.length);
+      
+      return results;
+    } catch (error) {
+      console.warn('[DB] FTS5 query failed, falling back to LIKE search:', error);
+    }
+  }
+  
+  // Fallback to original LIKE queries for backwards compatibility
   const pattern = `%${q}%`;
   const startPattern = `${q}%`;
-
   let querySQL: string;
   let params: string[];
 
@@ -124,10 +243,9 @@ export async function searchDrugs(
     params = [pattern, startPattern];
   }
 
-  console.log('[DB] Executing query');
-  
+  console.log('[DB] Executing fallback LIKE query');
   const results = await database.getAllAsync<Drug>(querySQL, params);
-  console.log('[DB] Results:', results.length);
+  console.log('[DB] LIKE Results:', results.length);
   
   return results;
 }
