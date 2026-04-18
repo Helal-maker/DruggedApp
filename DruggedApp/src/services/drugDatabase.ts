@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
-import { documentDirectory, getInfoAsync, copyAsync } from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system/legacy';
+const { documentDirectory, getInfoAsync, copyAsync, writeAsStringAsync, readAsStringAsync } = FileSystem;
 import * as SQLite from 'expo-sqlite';
 import { Asset } from 'expo-asset';
 
@@ -29,6 +30,7 @@ export type SearchField =
   | 'route';
 
 const DB_NAME = 'drugged.db';
+const DB_VERSION = 1; // Increment this when updating the database asset
 let db: SQLite.SQLiteDatabase | null = null;
 
 const dbAsset = require('../assets/drugged.db');
@@ -62,16 +64,31 @@ async function getNativeDb(): Promise<SQLite.SQLiteDatabase> {
     throw new Error('documentDirectory is null');
   }
 
-  const destPath = documentDirectory + DB_NAME;
-  const destInfo = await getInfoAsync(destPath);
-  if (!destInfo.exists) {
+  const destPath = documentDirectory + '/' + DB_NAME;
+  const versionPath = documentDirectory + '/' + DB_NAME + '.version';
+  
+  const [destInfo, versionInfo] = await Promise.all([
+    getInfoAsync(destPath),
+    getInfoAsync(versionPath)
+  ]);
+  
+  let existingVersion = 0;
+  if (versionInfo.exists) {
+    try {
+      const versionContent = await readAsStringAsync(versionPath);
+      existingVersion = parseInt(versionContent, 10);
+    } catch {}
+  }
+  
+  if (!destInfo.exists || existingVersion < DB_VERSION) {
     const asset = Asset.fromModule(dbAsset);
     await asset.downloadAsync();
     if (!asset.localUri) throw new Error('Failed to load drugged.db asset');
     await copyAsync({ from: asset.localUri, to: destPath });
+    await writeAsStringAsync(versionPath, DB_VERSION.toString());
   }
-  const absPath = destPath.startsWith('file://') ? destPath.slice(7) : destPath;
-  db = await SQLite.openDatabaseAsync(absPath);
+  
+  db = await SQLite.openDatabaseAsync(destPath);
   console.log('[DB] Native database opened successfully');
   return db;
 }

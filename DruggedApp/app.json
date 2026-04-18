@@ -4,7 +4,7 @@
     "slug": "drug-otc",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.DruggedApp"
+      "bundleIdentifier": "com.anonymous.DruggedApp",
+      "noCompress": [
+        ".db"
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -24,13 +27,18 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.DruggedApp"
+      "package": "com.anonymous.DruggedApp",
+      "noCompress": [
+        ".db"
+      ]
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      "expo-sqlite",
+      "expo-asset"
     ],
     "assets": [
       "./src/assets/drugged.db",
