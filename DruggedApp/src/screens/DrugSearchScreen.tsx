@@ -139,8 +139,8 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
     <TouchableOpacity
       style={styles.quickSearchButton}
       onPress={() => {
+        setSearchField('all');
         setQuery(searchTerm);
-        runSearch(searchTerm, 'all');
       }}
       activeOpacity={0.8}
     >

@@ -286,6 +286,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary.green,
     borderWidth: 4,
     borderColor: colors.primary.darkGreen,
+    overflow: 'hidden',
     ...shadows.medium,
   },
   buttonInner: {
@@ -303,6 +304,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.neutral.white,
     borderWidth: 4,
     borderColor: colors.border.light,
+    overflow: 'hidden',
     ...shadows.medium,
   },
   buttonInnerSecondary: {
