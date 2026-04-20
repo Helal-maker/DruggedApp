@@ -11,6 +11,8 @@ import {
   DrugSearchScreen,
   DrugSearchResultsScreen,
   DrugDetailScreen,
+  DrugAlternativesScreen,
+  MenuScreen,
 } from './src/screens';
 import { colors } from './src/theme';
 import { Drug, initDatabase, getDrugCount } from './src/services/drugDatabase';
@@ -23,7 +25,9 @@ type RootStackParamList = {
   DrugSearch: { drugCount: number };
   DrugSearchResults: { drugs: Drug[]; query: string };
   DrugDetail: { drug: Drug };
+  DrugAlternatives: { drug: Drug; mode: 'similar' | 'alternatives' };
   Disclaimer: undefined;
+  Menu: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -127,6 +131,16 @@ export default function App() {
         <Stack.Screen
           name="DrugDetail"
           component={DrugDetailScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="DrugAlternatives"
+          component={DrugAlternativesScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Menu"
+          component={MenuScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

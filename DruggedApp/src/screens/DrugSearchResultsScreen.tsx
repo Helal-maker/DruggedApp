@@ -1,16 +1,18 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   SafeAreaView,
-  ScrollView,
   TouchableOpacity,
   FlatList,
+  TouchableWithoutFeedback,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
-import { colors, spacing, typography, borderRadius } from '../theme';
+import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { Drug } from '../services/drugDatabase';
 
 type RootStackParamList = {
@@ -21,6 +23,7 @@ type RootStackParamList = {
   DrugSearch: undefined;
   DrugSearchResults: { drugs: Drug[]; query: string };
   DrugDetail: { drug: Drug };
+  DrugAlternatives: { drug: Drug; mode: 'similar' | 'alternatives' };
   Disclaimer: undefined;
 };
 
@@ -34,23 +37,53 @@ export const DrugSearchResultsScreen: React.FC<DrugSearchResultsScreenProps> = (
   route,
 }) => {
   const { drugs, query } = route.params;
+  const [selectedDrug, setSelectedDrug] = useState<Drug | null>(null);
+  const [blurAnim] = useState(new Animated.Value(0));
 
-  const renderDrugCard = useCallback((drug: Drug) => {
+  const handleLongPress = useCallback((drug: Drug) => {
+    setSelectedDrug(drug);
+    Animated.timing(blurAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [blurAnim]);
+
+  const closeMenu = useCallback(() => {
+    Animated.timing(blurAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => setSelectedDrug(null));
+  }, [blurAnim]);
+
+  const renderDrugCard = useCallback((drug: Drug, index: number) => {
     const handlePress = () => {
-      navigation.navigate('DrugDetail', { drug });
+      if (selectedDrug) {
+        closeMenu();
+      } else {
+        navigation.navigate('DrugDetail', { drug });
+      }
     };
+
+    const isSelected = selectedDrug?.id === drug.id;
 
     return (
       <TouchableOpacity
-        style={styles.drugCard}
+        style={[
+          styles.drugCard,
+          isSelected && styles.selectedDrugCard,
+        ]}
         onPress={handlePress}
-        activeOpacity={0.7}
+        onLongPress={() => handleLongPress(drug)}
+        delayLongPress={300}
+        activeOpacity={selectedDrug ? 1 : 0.7}
       >
         <Text style={styles.drugName}>{drug.trade_name}</Text>
         <Text style={styles.drugIngredient}>{drug.active_ingredient}</Text>
       </TouchableOpacity>
     );
-  }, [navigation]);
+  }, [navigation, selectedDrug, closeMenu, handleLongPress]);
 
   // Calculate fixed item height for getItemLayout (matches drugCard style + margin)
   const ITEM_HEIGHT = 80; // Optimized height
@@ -96,7 +129,7 @@ export const DrugSearchResultsScreen: React.FC<DrugSearchResultsScreenProps> = (
         <FlatList
           data={drugs}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => renderDrugCard(item)}
+          renderItem={({ item, index }) => renderDrugCard(item, index)}
           style={{ flex: 1 }}
           contentContainerStyle={styles.listContent}
           removeClippedSubviews={true}
@@ -112,6 +145,58 @@ export const DrugSearchResultsScreen: React.FC<DrugSearchResultsScreenProps> = (
           }
         />
       </View>
+
+      {/* Blur Overlay and Action Menu */}
+      {selectedDrug && (
+        <Animated.View style={[
+          styles.overlay,
+          { opacity: blurAnim }
+        ]}>
+          <TouchableWithoutFeedback onPress={closeMenu}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+          
+          <View style={styles.menuContainer}>
+            <View style={styles.selectedCardPreview}>
+              <Text style={styles.previewName}>{selectedDrug.trade_name}</Text>
+              <Text style={styles.previewIngredient}>{selectedDrug.active_ingredient}</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                closeMenu();
+                navigation.navigate('DrugAlternatives', { drug: selectedDrug, mode: 'similar' });
+              }}
+            >
+              <Text style={styles.menuItemText}>Similar</Text>
+              <Text style={styles.menuItemSubtext}>Same active ingredient</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                closeMenu();
+                navigation.navigate('DrugAlternatives', { drug: selectedDrug, mode: 'alternatives' });
+              }}
+            >
+              <Text style={styles.menuItemText}>Alternatives</Text>
+              <Text style={styles.menuItemSubtext}>Same function, different ingredient</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.menuItem, styles.menuItemLast]}
+              onPress={() => {
+                closeMenu();
+                navigation.navigate('DrugDetail', { drug: selectedDrug });
+              }}
+            >
+              <Text style={styles.menuItemText}>Details</Text>
+              <Text style={styles.menuItemSubtext}>View full information</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 };
@@ -174,8 +259,15 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     padding: spacing.md,
     marginBottom: spacing.sm,
-    borderWidth: 1,
+    borderWidth: 3,
     borderColor: colors.border.light,
+    ...shadows.medium,
+  },
+  selectedDrugCard: {
+    borderColor: colors.primary.green,
+    borderWidth: 4,
+    ...shadows.medium,
+    zIndex: 100,
   },
   drugName: {
     ...typography.h2,
@@ -190,6 +282,55 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
+    ...typography.body,
+    color: colors.neutral.gray,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+    zIndex: 1000,
+  },
+  menuContainer: {
+    width: '100%',
+    backgroundColor: colors.neutral.white,
+    borderRadius: borderRadius.xl,
+    overflow: 'hidden',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  selectedCardPreview: {
+    padding: spacing.lg,
+    backgroundColor: colors.primary.green,
+  },
+  previewName: {
+    ...typography.h2,
+    color: colors.neutral.white,
+    marginBottom: spacing.xs,
+  },
+  previewIngredient: {
+    ...typography.body,
+    color: colors.neutral.white,
+    opacity: 0.9,
+  },
+  menuItem: {
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  menuItemLast: {
+    borderBottomWidth: 0,
+  },
+  menuItemText: {
+    ...typography.h2,
+    marginBottom: spacing.xs,
+  },
+  menuItemSubtext: {
     ...typography.body,
     color: colors.neutral.gray,
   },

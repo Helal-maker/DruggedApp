@@ -111,6 +111,51 @@ async function getNativeDb(): Promise<SQLite.SQLiteDatabase> {
   }
 }
 
+// Wildcard pattern helpers
+function isWildcardPattern(pattern: string): boolean {
+  return pattern.includes('*');
+}
+
+function normalizeWildcardPattern(pattern: string): string {
+  // Trim, collapse multiple * into one, lowercase
+  return pattern
+    .trim()
+    .toLowerCase()
+    .replace(/\*+/g, '*');
+}
+
+function patternToSqlLike(pattern: string): string {
+  // Convert wildcard pattern * to SQL LIKE %
+  let normalized = normalizeWildcardPattern(pattern);
+  
+  // If pattern has internal wildcards but doesn't end with *, add implicit trailing wildcard
+  // This makes patterns like "top*x" work like "top*x*" to match partial names with suffixes
+  const hasInternalWildcards = normalized.indexOf('*') > 0 && normalized.lastIndexOf('*') < normalized.length - 1;
+  if (hasInternalWildcards && !normalized.endsWith('*')) {
+    normalized = normalized + '*';
+  }
+  
+  return normalized.replace(/\*/g, '%');
+}
+
+function getStartChar(pattern: string): string | null {
+  const normalized = normalizeWildcardPattern(pattern);
+  // Only use start char optimization if pattern starts with literal and has exactly one trailing wildcard
+  if (!normalized.startsWith("*") && normalized.indexOf("*") === normalized.length - 1 && (normalized.match(/\*/g) || []).length === 1) {
+    return normalized[0].toLowerCase();
+  }
+  return null;
+}
+
+function getEndChar(pattern: string): string | null {
+  const normalized = normalizeWildcardPattern(pattern);
+  // Only use end char optimization if pattern ends with literal and has exactly one leading wildcard
+  if (!normalized.endsWith("*") && normalized.lastIndexOf("*") === 0 && (normalized.match(/\*/g) || []).length === 1) {
+    return normalized[normalized.length - 1].toLowerCase();
+  }
+  return null;
+}
+
 export async function initDatabase(): Promise<void> {
   const database = await getNativeDb();
   
@@ -196,6 +241,95 @@ export async function searchDrugs(
 
   const database = await getNativeDb();
   
+  // Handle wildcard pattern search
+  if (isWildcardPattern(q)) {
+    console.log('[DB] Using wildcard pattern search');
+    const likePattern = patternToSqlLike(q);
+    const startChar = getStartChar(q);
+    const endChar = getEndChar(q);
+    
+    let querySQL: string;
+    let params: string[];
+
+    // Build where clause with optimizations
+    let whereConditions: string[] = [];
+    const whereParams: string[] = [];
+
+    // Add start/end character pre-filtering for optimization
+    if (startChar) {
+      if (field === 'all') {
+        whereConditions.push(`(LOWER(trade_name) LIKE ? OR LOWER(active_ingredient) LIKE ? OR LOWER(category) LIKE ? OR LOWER(manufacturer) LIKE ? OR LOWER(search_index) LIKE ?)`);
+        whereParams.push(`${startChar}%`, `${startChar}%`, `${startChar}%`, `${startChar}%`, `${startChar}%`);
+      } else {
+        whereConditions.push(`LOWER(${field}) LIKE ?`);
+        whereParams.push(`${startChar}%`);
+      }
+    }
+    
+    if (endChar) {
+      if (field === 'all') {
+        whereConditions.push(`(LOWER(trade_name) LIKE ? OR LOWER(active_ingredient) LIKE ? OR LOWER(category) LIKE ? OR LOWER(manufacturer) LIKE ? OR LOWER(search_index) LIKE ?)`);
+        whereParams.push(`%${endChar}`, `%${endChar}`, `%${endChar}`, `%${endChar}`, `%${endChar}`);
+      } else {
+        whereConditions.push(`LOWER(${field}) LIKE ?`);
+        whereParams.push(`%${endChar}`);
+      }
+    }
+
+    // Add actual wildcard pattern match
+    if (field === 'all') {
+      whereConditions.push(`(LOWER(trade_name) LIKE ? OR LOWER(active_ingredient) LIKE ? OR LOWER(category) LIKE ? OR LOWER(manufacturer) LIKE ? OR LOWER(search_index) LIKE ?)`);
+      whereParams.push(likePattern, likePattern, likePattern, likePattern, likePattern);
+    } else {
+      whereConditions.push(`LOWER(${field}) LIKE ?`);
+      whereParams.push(likePattern);
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+
+    // Priority ranking:
+    // 0 = Exact match
+    // 1 = Wildcard match on trade name
+    // 2 = Wildcard match on active ingredient  
+    // 3 = Other wildcard matches
+    if (field === 'all') {
+      querySQL = `
+        SELECT * FROM drugs
+        WHERE ${whereClause}
+        ORDER BY
+          CASE 
+            WHEN LOWER(trade_name) = LOWER(?) THEN 0
+            WHEN LOWER(trade_name) LIKE ? THEN 1
+            WHEN LOWER(active_ingredient) LIKE ? THEN 2
+            ELSE 3 
+          END,
+          trade_name
+        LIMIT 50
+      `;
+      params = [...whereParams, q, likePattern, likePattern];
+    } else {
+      querySQL = `
+        SELECT * FROM drugs
+        WHERE ${whereClause}
+        ORDER BY
+          CASE 
+            WHEN LOWER(${field}) = LOWER(?) THEN 0
+            WHEN LOWER(${field}) LIKE ? THEN 1
+            ELSE 2 
+          END,
+          trade_name
+        LIMIT 50
+      `;
+      params = [...whereParams, q, likePattern];
+    }
+
+    console.log('[DB] Executing wildcard query');
+    const results = await database.getAllAsync<Drug>(querySQL, params);
+    console.log('[DB] Wildcard Results:', results.length);
+    
+    return results;
+  }
+
   // Check if FTS5 table exists first
   let ftsAvailable = false;
   try {
@@ -299,7 +433,7 @@ export async function getDrugsByActiveIngredient(ingredient: string): Promise<Dr
   );
 }
 
-export async function getAlternativeDrugs(drugId: number): Promise<Drug[]> {
+export async function getSimilarDrugs(drugId: number): Promise<Drug[]> {
   const db = await getNativeDb();
   const source = await db.getFirstAsync<{ active_ingredient: string }>(
     'SELECT active_ingredient FROM drugs WHERE id = ?', [drugId]
@@ -312,6 +446,41 @@ export async function getAlternativeDrugs(drugId: number): Promise<Drug[]> {
      ORDER BY price ASC`,
     [source.active_ingredient, drugId]
   );
+}
+
+export async function getAlternativeDrugs(drugId: number): Promise<Drug[]> {
+  const db = await getNativeDb();
+  const source = await db.getFirstAsync<{ 
+    active_ingredient: string; 
+    category: string; 
+    subcategory: string;
+    subcategory2: string;
+  }>(
+    'SELECT active_ingredient, category, subcategory, subcategory2 FROM drugs WHERE id = ?', 
+    [drugId]
+  );
+  
+  if (!source) return [];
+
+  let query = `SELECT * FROM drugs WHERE active_ingredient != ? AND id != ?`;
+  const params: (string | number)[] = [source.active_ingredient, drugId];
+  
+  if (source.subcategory2) {
+    query += ` AND subcategory2 = ?`;
+    params.push(source.subcategory2);
+  } else if (source.subcategory) {
+    query += ` AND subcategory = ?`;
+    params.push(source.subcategory);
+  } else if (source.category) {
+    query += ` AND category = ?`;
+    params.push(source.category);
+  } else {
+    return [];
+  }
+  
+  query += ` ORDER BY price ASC`;
+
+  return db.getAllAsync<Drug>(query, params);
 }
 
 export async function getDrugsByCategory(category: string, limit = 50): Promise<Drug[]> {

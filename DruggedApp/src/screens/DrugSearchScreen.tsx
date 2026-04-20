@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   ScrollView,
   Pressable,
+  Animated,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
@@ -23,6 +25,7 @@ type RootStackParamList = {
   DrugSearch: { drugCount: number };
   DrugSearchResults: { drugs: Drug[]; query: string };
   DrugDetail: { drug: Drug };
+  DrugAlternatives: { drug: Drug; mode: 'similar' | 'alternatives' };
   Disclaimer: undefined;
 };
 
@@ -34,8 +37,8 @@ type DrugSearchScreenProps = {
 };
 
 const SEARCH_MODES: { label: string; value: SearchField; placeholder: string }[] = [
-  { label: 'All', value: 'all', placeholder: 'e.g., PANADOL, PARACETAMOL...' },
-  { label: 'Trade Name', value: 'trade_name', placeholder: 'e.g., PANADOL, BRUFEN...' },
+  { label: 'All', value: 'all', placeholder: 'e.g., PANADOL, t*a*x for topamax...' },
+  { label: 'Trade Name', value: 'trade_name', placeholder: 'e.g., PANADOL, t*a*x for topamax...' },
   { label: 'Ingredient', value: 'active_ingredient', placeholder: 'e.g., PARACETAMOL, IBUPROFEN...' },
   { label: 'Category', value: 'category', placeholder: 'e.g., ANALGESIC, SKIN CARE...' },
   { label: 'Manufacturer', value: 'manufacturer', placeholder: 'e.g., NOVARTIS, PFIZER...' },
@@ -52,6 +55,25 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
   const [searchField, setSearchField] = useState<SearchField>('all');
   const [error, setError] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [selectedDrug, setSelectedDrug] = useState<Drug | null>(null);
+  const [blurAnim] = useState(new Animated.Value(0));
+
+  const handleLongPress = (drug: Drug) => {
+    setSelectedDrug(drug);
+    Animated.timing(blurAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const closeMenu = () => {
+    Animated.timing(blurAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => setSelectedDrug(null));
+  };
   const drugCount = route.params?.drugCount ?? 0;
   const inputRef = useRef<TextInput>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -132,6 +154,7 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
           }
         }, 100);
       }}
+      activeOpacity={0.8}
     >
       <Text style={styles.quickSearchText}>{title}</Text>
     </TouchableOpacity>
@@ -156,7 +179,7 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
             <Text style={styles.subtitle}>{drugCount} drugs in database</Text>
           )}
           <Text style={styles.subtitle}>
-            Search by name, active ingredient, or category
+            Search by name, active ingredient, or category. Use * for wildcards (e.g., t*a*x)
           </Text>
         </View>
 
@@ -217,6 +240,7 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
           <TouchableOpacity
             style={styles.searchButton}
             onPress={() => handleSearch()}
+            activeOpacity={0.8}
           >
             <Text style={styles.searchButtonText}>Search</Text>
           </TouchableOpacity>
@@ -239,13 +263,24 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
                 <Text style={styles.resultsCount}>
                   {results.length} results found
                 </Text>
-                {results.slice(0, 5).map((item) => (
-                  <TouchableOpacity
-                    key={item.id.toString()}
-                    style={styles.resultItem}
-                    onPress={() => navigation.navigate('DrugDetail', { drug: item })}
-                    activeOpacity={0.7}
-                  >
+                 {results.slice(0, 5).map((item) => (
+                   <TouchableOpacity
+                     key={item.id.toString()}
+                     style={[
+                       styles.resultItem,
+                       selectedDrug?.id === item.id && styles.selectedResultItem,
+                     ]}
+                     onPress={() => {
+                       if (selectedDrug) {
+                         closeMenu();
+                       } else {
+                         navigation.navigate('DrugDetail', { drug: item });
+                       }
+                     }}
+                     onLongPress={() => handleLongPress(item)}
+                     delayLongPress={300}
+                     activeOpacity={selectedDrug ? 1 : 0.8}
+                   >
                     <Text style={styles.resultName}>{item.trade_name}</Text>
                     <Text style={styles.resultIngredient}>
                       {item.active_ingredient}
@@ -253,21 +288,12 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
                     <Text style={styles.resultMeta}>
                       {[item.category, item.route].filter(Boolean).join(' · ')}
                     </Text>
-                    <View style={styles.priceRow}>
-                      <Text style={styles.resultPrice}>
-                        EGP {item.price.toFixed(2)}
-                      </Text>
-                      {item.price_old && item.price_old > item.price && (
-                        <Text style={styles.priceOld}>
-                          EGP {item.price_old.toFixed(2)}
-                        </Text>
-                      )}
-                    </View>
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity
                   style={styles.viewAllButton}
                   onPress={handleViewResults}
+                  activeOpacity={0.8}
                 >
                   <Text style={styles.viewAllButtonText}>
                     View all {results.length} results
@@ -289,9 +315,61 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
             </View>
           </>
         )}
-      </ScrollView>
-    </SafeAreaView>
-  );
+       </ScrollView>
+
+       {/* Blur Overlay and Action Menu */}
+       {selectedDrug && (
+         <Animated.View style={[
+           styles.overlay,
+           { opacity: blurAnim }
+         ]}>
+           <TouchableWithoutFeedback onPress={closeMenu}>
+             <View style={StyleSheet.absoluteFill} />
+           </TouchableWithoutFeedback>
+           
+           <View style={styles.menuContainer}>
+             <View style={styles.selectedCardPreview}>
+               <Text style={styles.previewName}>{selectedDrug.trade_name}</Text>
+               <Text style={styles.previewIngredient}>{selectedDrug.active_ingredient}</Text>
+             </View>
+
+             <TouchableOpacity
+               style={styles.menuItem}
+               onPress={() => {
+                 closeMenu();
+                 navigation.navigate('DrugAlternatives', { drug: selectedDrug, mode: 'similar' });
+               }}
+             >
+               <Text style={styles.menuItemText}>Similar</Text>
+               <Text style={styles.menuItemSubtext}>Same active ingredient</Text>
+             </TouchableOpacity>
+
+             <TouchableOpacity
+               style={styles.menuItem}
+               onPress={() => {
+                 closeMenu();
+                 navigation.navigate('DrugAlternatives', { drug: selectedDrug, mode: 'alternatives' });
+               }}
+             >
+               <Text style={styles.menuItemText}>Alternatives</Text>
+               <Text style={styles.menuItemSubtext}>Same function, different ingredient</Text>
+             </TouchableOpacity>
+
+             <TouchableOpacity
+               style={[styles.menuItem, styles.menuItemLast]}
+               onPress={() => {
+                 closeMenu();
+                 navigation.navigate('DrugDetail', { drug: selectedDrug });
+               }}
+             >
+               <Text style={styles.menuItemText}>Details</Text>
+               <Text style={styles.menuItemSubtext}>View full information</Text>
+             </TouchableOpacity>
+           </View>
+         </Animated.View>
+       )}
+     </SafeAreaView>
+   );
 };
 
 const styles = StyleSheet.create({
@@ -304,10 +382,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    padding: spacing.lg,
   },
   header: {
-    padding: spacing.lg,
-    paddingBottom: spacing.md,
+    marginBottom: spacing.xl,
   },
   backButton: {
     marginBottom: spacing.sm,
@@ -319,14 +397,13 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.h1,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   subtitle: {
     ...typography.body,
     color: colors.neutral.gray,
   },
   dropdownContainer: {
-    paddingHorizontal: spacing.lg,
     marginBottom: spacing.md,
     zIndex: 100,
   },
@@ -336,9 +413,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.neutral.white,
     borderWidth: 3,
-    borderColor: colors.border.dark,
+    borderColor: colors.border.light,
     borderRadius: borderRadius.lg,
     padding: spacing.md,
+    ...shadows.medium,
   },
   dropdownButtonText: {
     ...typography.body,
@@ -353,12 +431,12 @@ const styles = StyleSheet.create({
   dropdownMenu: {
     position: 'absolute',
     top: '100%',
-    left: spacing.lg,
+    left: 0,
     right: 0,
     marginTop: spacing.xs,
     backgroundColor: colors.neutral.white,
     borderWidth: 3,
-    borderColor: colors.border.dark,
+    borderColor: colors.border.light,
     borderRadius: borderRadius.lg,
     zIndex: 200,
     elevation: 4,
@@ -389,7 +467,6 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     flexDirection: 'row',
-    paddingHorizontal: spacing.lg,
     marginBottom: spacing.md,
   },
   searchInput: {
@@ -399,27 +476,31 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     ...typography.body,
     borderWidth: 3,
-    borderColor: colors.border.dark,
+    borderColor: colors.border.light,
     minHeight: 56,
+    ...shadows.medium,
   },
   searchButton: {
     backgroundColor: colors.primary.green,
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: colors.primary.darkGreen,
     borderRadius: borderRadius.lg,
     paddingHorizontal: spacing.lg,
     marginLeft: spacing.sm,
     justifyContent: 'center',
     minHeight: 56,
+    ...shadows.medium,
   },
   searchButtonText: {
     ...typography.button,
   },
   errorContainer: {
     backgroundColor: colors.accent.red,
-    margin: spacing.lg,
+    marginBottom: spacing.md,
     padding: spacing.md,
     borderRadius: borderRadius.md,
+    borderWidth: 3,
+    borderColor: colors.accent.red,
   },
   errorText: {
     ...typography.small,
@@ -429,10 +510,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: spacing.xxl,
   },
   resultsPreview: {
-    padding: spacing.lg,
-    paddingTop: 0,
+    marginBottom: spacing.md,
   },
   resultsCount: {
     ...typography.body,
@@ -441,11 +522,12 @@ const styles = StyleSheet.create({
   },
   resultItem: {
     backgroundColor: colors.neutral.white,
-    borderWidth: 4,
+    borderWidth: 3,
     borderColor: colors.border.light,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.lg,
     padding: spacing.md,
     marginBottom: spacing.sm,
+    ...shadows.medium,
   },
   resultName: {
     ...typography.h3,
@@ -460,36 +542,20 @@ const styles = StyleSheet.create({
     color: colors.neutral.gray,
     marginTop: 2,
   },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.xs,
-  },
-  resultPrice: {
-    ...typography.body,
-    fontWeight: '700',
-    color: colors.primary.green,
-  },
-  priceOld: {
-    ...typography.small,
-    color: colors.neutral.gray,
-    textDecorationLine: 'line-through',
-    marginLeft: spacing.sm,
-  },
   viewAllButton: {
-    backgroundColor: colors.primary.darkGreen,
+    backgroundColor: colors.primary.green,
     borderWidth: 4,
     borderColor: colors.primary.darkGreen,
     borderRadius: borderRadius.lg,
     padding: spacing.md,
     alignItems: 'center',
     marginTop: spacing.sm,
+    ...shadows.medium,
   },
   viewAllButtonText: {
     ...typography.button,
   },
   quickSearchSection: {
-    padding: spacing.lg,
     paddingTop: spacing.lg,
   },
   quickSearchTitle: {
@@ -502,17 +568,77 @@ const styles = StyleSheet.create({
   },
   quickSearchButton: {
     backgroundColor: colors.neutral.white,
-    borderWidth: 4,
+    borderWidth: 3,
     borderColor: colors.border.light,
     borderRadius: borderRadius.lg,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     marginRight: spacing.sm,
     marginBottom: spacing.sm,
+    ...shadows.small,
   },
   quickSearchText: {
     ...typography.small,
     color: colors.neutral.charcoal,
     fontWeight: '600',
+  },
+  selectedResultItem: {
+    borderColor: colors.primary.green,
+    borderWidth: 4,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 0,
+    zIndex: 100,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+    zIndex: 1000,
+  },
+  menuContainer: {
+    width: '100%',
+    backgroundColor: colors.neutral.white,
+    borderRadius: borderRadius.xl,
+    overflow: 'hidden',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  selectedCardPreview: {
+    padding: spacing.lg,
+    backgroundColor: colors.primary.green,
+  },
+  previewName: {
+    ...typography.h2,
+    color: colors.neutral.white,
+    marginBottom: spacing.xs,
+  },
+  previewIngredient: {
+    ...typography.body,
+    color: colors.neutral.white,
+    opacity: 0.9,
+  },
+  menuItem: {
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  menuItemLast: {
+    borderBottomWidth: 0,
+  },
+  menuItemText: {
+    ...typography.h2,
+    marginBottom: spacing.xs,
+  },
+  menuItemSubtext: {
+    ...typography.body,
+    color: colors.neutral.gray,
   },
 });
