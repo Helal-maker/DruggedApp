@@ -11,14 +11,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { PillBadge, SymptomCard } from '../components';
 import { colors, spacing, typography, borderRadius } from '../theme';
 import { getSymptomsList } from '../services/constraintEngine';
-
-type RootStackParamList = {
-  SectionSelect: undefined;
-  Home: undefined;
-  UserInfo: { symptom: string };
-  Results: { symptom: string; age: number; sex: string; pregnancy: boolean };
-  Disclaimer: undefined;
-};
+import { RootStackParamList } from '../navigation/types';
 
 type HomeScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;

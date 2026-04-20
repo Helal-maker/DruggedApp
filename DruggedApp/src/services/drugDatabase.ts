@@ -69,8 +69,8 @@ async function getNativeDb(): Promise<SQLite.SQLiteDatabase> {
       throw new Error('documentDirectory is null');
     }
 
-    const destPath = documentDirectory + '/' + DB_NAME;
-    const versionPath = documentDirectory + '/' + DB_NAME + '.version';
+    const destPath = documentDirectory + DB_NAME;
+    const versionPath = documentDirectory + DB_NAME + '.version';
     
     const [destInfo, versionInfo] = await Promise.all([
       getInfoAsync(destPath),
@@ -98,7 +98,7 @@ async function getNativeDb(): Promise<SQLite.SQLiteDatabase> {
       await writeAsStringAsync(versionPath, DB_VERSION.toString());
     }
     
-    db = await SQLite.openDatabaseAsync(DB_NAME, undefined, documentDirectory);
+    db = await SQLite.openDatabaseAsync(destPath);
     console.log('[DB] Native database opened successfully');
     return db;
   })();
@@ -192,16 +192,11 @@ export async function initDatabase(): Promise<void> {
       END;
 
       CREATE TRIGGER IF NOT EXISTS drugs_fts_update AFTER UPDATE ON drugs BEGIN
-        UPDATE drugs_fts SET
-          trade_name = new.trade_name,
-          active_ingredient = new.active_ingredient,
-          category = new.category,
-          subcategory = new.subcategory,
-          manufacturer = new.manufacturer,
-          distributor = new.distributor,
-          route = new.route,
-          search_index = new.search_index
-        WHERE rowid = new.id;
+        DELETE FROM drugs_fts WHERE rowid = old.id;
+        INSERT INTO drugs_fts(rowid, trade_name, active_ingredient, category, subcategory,
+                             manufacturer, distributor, route, search_index)
+        VALUES (new.id, new.trade_name, new.active_ingredient, new.category, new.subcategory,
+                new.manufacturer, new.distributor, new.route, new.search_index);
       END;
 
       CREATE TRIGGER IF NOT EXISTS drugs_fts_delete AFTER DELETE ON drugs BEGIN

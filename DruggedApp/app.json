@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "DruggedApp",
+    "name": "Drugged",
     "slug": "drug-otc",
-    "version": "1.0.0",
+    "version": "3.4.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "light",
@@ -42,9 +42,20 @@
         "expo-asset",
         {
           "assets": [
-            "./src/assets/drugged.db",
-            "./src/assets/drugs_web_fallback.json"
+            "./src/assets/drugged.db"
           ]
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "image": "./assets/images/splash-icon.png",
+          "dark": {
+            "image": "./assets/images/splash-icon-dark.png",
+            "backgroundColor": "#000000"
+          },
+          "imageWidth": 1024
         }
       ]
     ],
@@ -54,14 +65,5 @@
       }
     },
     "owner": "orynos-organization"
-  },
-  "expo-splash-screen": {
-    "backgroundColor": "#FFFFFF",
-    "image": "./assets/images/splash-icon.png",
-    "dark": {
-      "image": "./assets/images/splash-icon-dark.png",
-      "backgroundColor": "#000000"
-    },
-    "imageWidth": 1024
   }
 }
