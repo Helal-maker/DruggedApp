@@ -11,4 +11,5 @@ export type RootStackParamList = {
   DrugAlternatives: { drug: Drug; mode: 'similar' | 'alternatives' };
   Disclaimer: undefined;
   Menu: undefined;
+  Donation: undefined;
 };

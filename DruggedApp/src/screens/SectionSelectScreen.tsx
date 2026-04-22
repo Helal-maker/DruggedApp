@@ -18,6 +18,7 @@ type RootStackParamList = {
   DrugSearchResults: { query: string };
   Disclaimer: undefined;
   Menu: undefined;
+  Donation: undefined;
 };
 
 type SectionSelectScreenProps = {
@@ -86,6 +87,14 @@ export const SectionSelectScreen: React.FC<SectionSelectScreenProps> = ({
           </Text>
         </View>
       </View>
+
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => navigation.navigate('Donation')}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.fabIcon}>❤️</Text>
+      </TouchableOpacity>
     </SafeAreaView>
   );
 };
@@ -178,5 +187,23 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.neutral.gray,
     textAlign: 'center',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: spacing.lg,
+    right: spacing.lg,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary.green,
+    borderWidth: 3,
+    borderColor: colors.primary.darkGreen,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.medium,
+  },
+  fabIcon: {
+    fontSize: 24,
+    color: colors.neutral.white,
   },
 });

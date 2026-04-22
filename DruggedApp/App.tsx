@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, ActivityIndicator, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, ActivityIndicator, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import {
   HomeScreen,
   UserInfoScreen,
@@ -13,10 +14,29 @@ import {
   DrugDetailScreen,
   DrugAlternativesScreen,
   MenuScreen,
+  DonationScreen,
 } from './src/screens';
 import { colors } from './src/theme';
 import { Drug, initDatabase, getDrugCount } from './src/services/drugDatabase';
 import { RootStackParamList } from './src/navigation/types';
+
+// Configure notifications handler
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
+
+const EMPATHY_MESSAGES = [
+  "Every small donation helps keep this app free for everyone 💚",
+  "Help us maintain this drug database with a small donation 🙏",
+  "Your support means we can keep improving this app ❤️",
+  "If you find this app useful, consider supporting development 💝",
+];
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -42,6 +62,67 @@ export default function App() {
 
     initializeApp();
   }, [retryCount]);
+
+  useEffect(() => {
+    const setupNotifications = async () => {
+      // Request permissions
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync({
+          android: {
+            allowAlert: true,
+            allowSound: false,
+            allowBadge: false,
+          },
+        });
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        console.log('[Notifications] Permission not granted');
+        return;
+      }
+
+      // Android notification channel setup
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('donation-reminders', {
+          name: 'Donation reminders',
+          description: 'Gentle reminders to support the app',
+          importance: Notifications.AndroidImportance.LOW,
+          vibrationPattern: [],
+          lightColor: colors.primary.green,
+        });
+      }
+
+      // Cancel existing notifications to avoid duplicates
+      await Notifications.cancelAllScheduledNotificationsAsync();
+
+      // Schedule recurring notifications (every 4-6 days, random interval)
+      const randomMessage = EMPATHY_MESSAGES[Math.floor(Math.random() * EMPATHY_MESSAGES.length)];
+      const intervalDays = Math.floor(Math.random() * 3) + 4; // 4,5,6 days
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Drugged App',
+          body: randomMessage,
+          data: { screen: 'Donation' },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          repeats: true,
+          seconds: intervalDays * 24 * 60 * 60,
+        },
+      });
+
+      console.log(`[Notifications] Scheduled donation reminder every ${intervalDays} days`);
+    };
+
+    if (dbInitialized) {
+      setupNotifications();
+    }
+  }, [dbInitialized]);
 
   if (dbError) {
     return (
@@ -139,6 +220,11 @@ export default function App() {
         <Stack.Screen
           name="Menu"
           component={MenuScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Donation"
+          component={DonationScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>
