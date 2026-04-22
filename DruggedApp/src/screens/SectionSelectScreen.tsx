@@ -7,19 +7,8 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../navigation/types';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
-
-type RootStackParamList = {
-  SectionSelect: undefined;
-  Home: undefined;
-  UserInfo: { symptom: string };
-  Results: { symptom: string; age: number; sex: string; pregnancy: boolean };
-  DrugSearch: undefined;
-  DrugSearchResults: { query: string };
-  Disclaimer: undefined;
-  Menu: undefined;
-  Donation: undefined;
-};
 
 type SectionSelectScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'SectionSelect'>;
@@ -66,7 +55,7 @@ export const SectionSelectScreen: React.FC<SectionSelectScreenProps> = ({
 
         <TouchableOpacity
           style={styles.sectionCard}
-          onPress={() => navigation.navigate('DrugSearch')}
+          onPress={() => navigation.navigate('DrugSearch', {})}
           activeOpacity={0.8}
         >
           <View style={styles.sectionIcon}>
@@ -92,6 +81,10 @@ export const SectionSelectScreen: React.FC<SectionSelectScreenProps> = ({
         style={styles.fab}
         onPress={() => navigation.navigate('Donation')}
         activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel="Donate"
+        accessibilityHint="Open donation screen"
+        hitSlop={{ top: 10, left: 10, right: 10, bottom: 10 }}
       >
         <Text style={styles.fabIcon}>❤️</Text>
       </TouchableOpacity>

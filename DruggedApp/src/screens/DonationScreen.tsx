@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,20 +9,17 @@ import {
   ScrollView,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../navigation/types';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
-
-type RootStackParamList = {
-  Donation: undefined;
-  Menu: undefined;
-};
 
 type DonationScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Donation'>;
 };
 
-const DONATION_PHONE = '+20 123 456 7890';
+const DONATION_PHONE = process.env.DONATION_PHONE || '+20 123 456 7890';
 
 export const DonationScreen: React.FC<DonationScreenProps> = ({ navigation }) => {
+  const [qrImageError, setQrImageError] = useState(false);
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -65,11 +62,18 @@ export const DonationScreen: React.FC<DonationScreenProps> = ({ navigation }) =>
           </View>
 
           <View style={styles.qrCard}>
-            <Image
-              source={require('../assets/qr.png')}
-              style={styles.qrImage}
-              resizeMode="contain"
-            />
+            {qrImageError ? (
+              <View style={styles.qrPlaceholder}>
+                <Text style={styles.qrPlaceholderText}>QR Code</Text>
+              </View>
+            ) : (
+              <Image
+                source={require('../assets/qr.png')}
+                style={styles.qrImage}
+                resizeMode="contain"
+                onError={() => setQrImageError(true)}
+              />
+            )}
             <Text style={styles.qrHint}>Scan this QR code with Instapay</Text>
           </View>
 
@@ -84,13 +88,13 @@ export const DonationScreen: React.FC<DonationScreenProps> = ({ navigation }) =>
             </View>
           </View>
         </View>
-
-        <View style={styles.thankYouCard}>
-          <Text style={styles.thankYouText}>
-            Thank you for your support! Every donation makes a difference 💚
-          </Text>
-        </View>
       </ScrollView>
+      
+      <View style={styles.thankYouCard}>
+        <Text style={styles.thankYouText}>
+          Thank you for your support! Every donation makes a difference 💚
+        </Text>
+      </View>
     </SafeAreaView>
   );
 };
@@ -219,13 +223,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   thankYouCard: {
-    marginTop: 'auto',
     backgroundColor: colors.neutral.white,
     borderRadius: borderRadius.lg,
     padding: spacing.md,
     borderWidth: 3,
     borderColor: colors.primary.green,
     alignItems: 'center',
+    margin: spacing.lg,
+    marginTop: 0,
   },
   thankYouText: {
     ...typography.body,

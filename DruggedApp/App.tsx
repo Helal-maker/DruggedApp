@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, ActivityIndicator, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native';
 import * as Notifications from 'expo-notifications';
@@ -23,7 +23,6 @@ import { RootStackParamList } from './src/navigation/types';
 // Configure notifications handler
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldShowBanner: true,
     shouldShowList: true,
     shouldPlaySound: false,
@@ -45,6 +44,7 @@ export default function App() {
   const [dbError, setDbError] = useState<string | null>(null);
   const [drugCount, setDrugCount] = useState<number>(0);
   const [retryCount, setRetryCount] = useState(0);
+  const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -119,9 +119,34 @@ export default function App() {
       console.log(`[Notifications] Scheduled donation reminder every ${intervalDays} days`);
     };
 
+    // Handle notification responses for navigation
+    const handleNotificationResponse = (response: Notifications.NotificationResponse) => {
+      const screen = response.notification.request.content.data?.screen;
+      if (screen === 'Donation' && navigationRef.current) {
+        navigationRef.current.navigate('Donation');
+      }
+    };
+
+    // Setup listeners
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
+
+    // Check for cold start notification
+    const checkColdStartNotification = async () => {
+      const lastResponse = await Notifications.getLastNotificationResponseAsync();
+      if (lastResponse && lastResponse.notification.request.content.data?.screen === 'Donation' && navigationRef.current) {
+        navigationRef.current.navigate('Donation');
+      }
+    };
+    
+    checkColdStartNotification();
+
     if (dbInitialized) {
       setupNotifications();
     }
+
+    return () => {
+      responseSubscription.remove();
+    };
   }, [dbInitialized]);
 
   if (dbError) {
@@ -152,7 +177,7 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <StatusBar style="dark" />
       <Stack.Navigator
         initialRouteName="SectionSelect"
