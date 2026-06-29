@@ -9,6 +9,7 @@ import {
   TouchableWithoutFeedback,
   Animated,
 } from 'react-native';
+import { DrugActionMenu } from '../components/DrugActionMenu';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
@@ -45,7 +46,7 @@ export const DrugSearchResultsScreen: React.FC<DrugSearchResultsScreenProps> = (
     }).start(() => setSelectedDrug(null));
   }, [blurAnim]);
 
-  const renderDrugCard = useCallback(({ item: drug, index }: { item: Drug; index: number }) => {
+  const renderDrugCard = useCallback(({ item: drug }: { item: Drug }) => {
     const handlePress = () => {
       if (selectedDrug) {
         closeMenu();
@@ -73,17 +74,18 @@ export const DrugSearchResultsScreen: React.FC<DrugSearchResultsScreenProps> = (
     );
   }, [navigation, selectedDrug, closeMenu, handleLongPress]);
 
-  // Calculate fixed item height for getItemLayout (matches drugCard style + margin)
-  const ITEM_HEIGHT = 80; // Optimized height
-  const getItemLayout = useCallback((data: ArrayLike<Drug> | null | undefined, index: number) => ({
-    length: ITEM_HEIGHT,
-    offset: ITEM_HEIGHT * index,
-    index,
-  }), []);
-
   const uniqueIngredients = useMemo(() => 
     [...new Set(drugs.map((d) => d.active_ingredient))]
   , [drugs]);
+
+  const handleMenuNavigate = useCallback((screen: string, drug: Drug, mode?: 'similar' | 'alternatives') => {
+    closeMenu();
+    if (screen === 'DrugAlternatives' && mode) {
+      navigation.navigate('DrugAlternatives', { drug, mode });
+    } else {
+      navigation.navigate(screen as any, { drug });
+    }
+  }, [closeMenu, navigation]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -124,7 +126,6 @@ export const DrugSearchResultsScreen: React.FC<DrugSearchResultsScreenProps> = (
           initialNumToRender={10}
           maxToRenderPerBatch={5}
           windowSize={10}
-          getItemLayout={getItemLayout}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>No drugs found</Text>
@@ -133,57 +134,13 @@ export const DrugSearchResultsScreen: React.FC<DrugSearchResultsScreenProps> = (
         />
       </View>
 
-      {/* Blur Overlay and Action Menu */}
-      {selectedDrug && (
-        <Animated.View style={[
-          styles.overlay,
-          { opacity: blurAnim }
-        ]}>
-          <TouchableWithoutFeedback onPress={closeMenu}>
-            <View style={StyleSheet.absoluteFill} />
-          </TouchableWithoutFeedback>
-          
-          <View style={styles.menuContainer}>
-            <View style={styles.selectedCardPreview}>
-              <Text style={styles.previewName}>{selectedDrug.trade_name}</Text>
-              <Text style={styles.previewIngredient}>{selectedDrug.active_ingredient}</Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate('DrugAlternatives', { drug: selectedDrug, mode: 'similar' });
-              }}
-            >
-              <Text style={styles.menuItemText}>Similar</Text>
-              <Text style={styles.menuItemSubtext}>Same active ingredient</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate('DrugAlternatives', { drug: selectedDrug, mode: 'alternatives' });
-              }}
-            >
-              <Text style={styles.menuItemText}>Alternatives</Text>
-              <Text style={styles.menuItemSubtext}>Same function, different ingredient</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.menuItem, styles.menuItemLast]}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate('DrugDetail', { drug: selectedDrug });
-              }}
-            >
-              <Text style={styles.menuItemText}>Details</Text>
-              <Text style={styles.menuItemSubtext}>View full information</Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-      )}
+      <DrugActionMenu
+        drug={selectedDrug}
+        visible={!!selectedDrug}
+        onClose={closeMenu}
+        blurAnim={blurAnim}
+        onNavigate={handleMenuNavigate}
+      />
     </SafeAreaView>
   );
 };
@@ -218,7 +175,7 @@ const styles = StyleSheet.create({
     marginTop: 0,
     backgroundColor: colors.primary.green,
     borderRadius: borderRadius.lg,
-    padding: spacing.md,
+    padding: spacing.lg,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -244,8 +201,8 @@ const styles = StyleSheet.create({
   drugCard: {
     backgroundColor: colors.neutral.white,
     borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
     borderWidth: 3,
     borderColor: colors.border.light,
     ...shadows.medium,
@@ -258,66 +215,19 @@ const styles = StyleSheet.create({
   },
   drugName: {
     ...typography.h2,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
+    fontWeight: '700',
   },
   drugIngredient: {
     ...typography.body,
     color: colors.neutral.gray,
+    lineHeight: 20,
   },
   emptyState: {
     padding: spacing.xl,
     alignItems: 'center',
   },
   emptyText: {
-    ...typography.body,
-    color: colors.neutral.gray,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-    zIndex: 1000,
-  },
-  menuContainer: {
-    width: '100%',
-    backgroundColor: colors.neutral.white,
-    borderRadius: borderRadius.xl,
-    overflow: 'hidden',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-  },
-  selectedCardPreview: {
-    padding: spacing.lg,
-    backgroundColor: colors.primary.green,
-  },
-  previewName: {
-    ...typography.h2,
-    color: colors.neutral.white,
-    marginBottom: spacing.xs,
-  },
-  previewIngredient: {
-    ...typography.body,
-    color: colors.neutral.white,
-    opacity: 0.9,
-  },
-  menuItem: {
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
-  },
-  menuItemLast: {
-    borderBottomWidth: 0,
-  },
-  menuItemText: {
-    ...typography.h2,
-    marginBottom: spacing.xs,
-  },
-  menuItemSubtext: {
     ...typography.body,
     color: colors.neutral.gray,
   },

@@ -11,11 +11,11 @@ import {
   ScrollView,
   Pressable,
   Animated,
-  TouchableWithoutFeedback,
 } from 'react-native';
+import { DrugActionMenu } from '../components/DrugActionMenu';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
-import { colors, spacing, typography, borderRadius, shadows } from '../theme';
+import { colors, spacing, typography, borderRadius, shadows, layout } from '../theme';
 import { searchDrugs, Drug, SearchField } from '../services/drugDatabase';
 import { RootStackParamList } from '../navigation/types';
 
@@ -62,12 +62,13 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
       useNativeDriver: true,
     }).start(() => setSelectedDrug(null));
   };
-  const drugCount = route.params?.drugCount ?? 0;
+
   const inputRef = useRef<TextInput>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeSearchId = useRef(0);
 
-  const currentMode = SEARCH_MODES.find(m => m.value === searchField)!;
+  // Safe mode selection - default to 'all' if somehow invalid
+  const currentMode = SEARCH_MODES.find(m => m.value === searchField) || SEARCH_MODES[0];
 
   const runSearch = React.useCallback(async (rawQuery: string, field: SearchField) => {
     const trimmed = rawQuery.trim();
@@ -83,14 +84,20 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
     setError(null);
 
     try {
-      console.log('[Search] Searching for:', trimmed, 'in field:', field);
+      if (__DEV__) {
+        console.log('[Search] Searching for:', trimmed, 'in field:', field);
+      }
       const searchResults = await searchDrugs(trimmed, field);
       if (searchId !== activeSearchId.current) return;
-      console.log('[Search] Found results:', searchResults.length);
+      if (__DEV__) {
+        console.log('[Search] Found results:', searchResults.length);
+      }
       setResults(searchResults);
     } catch (error) {
       if (searchId !== activeSearchId.current) return;
-      console.error('[Search] Error:', error);
+      if (__DEV__) {
+        console.error('[Search] Error:', error);
+      }
       setError('Search failed. Please try again.');
     } finally {
       if (searchId === activeSearchId.current) {
@@ -101,33 +108,25 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
 
   // Debounce search query changes
   useEffect(() => {
-    // Clear any existing pending search
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
 
-    // Don't search for empty queries
     if (!query.trim()) {
       setResults([]);
       return;
     }
 
-    // Schedule new search after 300ms delay
     searchTimeoutRef.current = setTimeout(() => {
       runSearch(query, searchField);
     }, 300);
 
-    // Cleanup timeout on unmount or when query changes
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
       }
     };
   }, [query, searchField, runSearch]);
-
-  const handleSearch = async (searchQuery?: string) => {
-    await runSearch(searchQuery || query, searchField);
-  };
 
   const handleViewResults = () => {
     if (results.length > 0) {
@@ -163,12 +162,6 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
             <Text style={styles.backText}>‹ Select Section</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Drug Search</Text>
-          {drugCount > 0 && (
-            <Text style={styles.subtitle}>{drugCount} drugs in database</Text>
-          )}
-          <Text style={styles.subtitle}>
-            Search by name, active ingredient, or category. Use * for wildcards (e.g., t*a*x)
-          </Text>
         </View>
 
         <View style={styles.dropdownContainer}>
@@ -220,14 +213,14 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
             placeholderTextColor={colors.neutral.gray}
             value={query}
             onChangeText={setQuery}
-            onSubmitEditing={() => handleSearch()}
+            onSubmitEditing={() => runSearch(query, searchField)}
             returnKeyType="search"
             autoCapitalize="characters"
             autoCorrect={false}
           />
           <TouchableOpacity
             style={styles.searchButton}
-            onPress={() => handleSearch()}
+            onPress={() => runSearch(query, searchField)}
             activeOpacity={0.8}
           >
             <Text style={styles.searchButtonText}>Search</Text>
@@ -235,8 +228,8 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
         </View>
 
         {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>Error: {error}</Text>
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>⚠ {error}</Text>
           </View>
         )}
 
@@ -247,28 +240,30 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
         ) : (
           <>
             {results.length > 0 && (
-              <View style={styles.resultsPreview}>
-                <Text style={styles.resultsCount}>
-                  {results.length} results found
-                </Text>
-                 {results.slice(0, 5).map((item) => (
-                   <TouchableOpacity
-                     key={item.id.toString()}
-                     style={[
-                       styles.resultItem,
-                       selectedDrug?.id === item.id && styles.selectedResultItem,
-                     ]}
-                     onPress={() => {
-                       if (selectedDrug) {
-                         closeMenu();
-                       } else {
-                         navigation.navigate('DrugDetail', { drug: item });
-                       }
-                     }}
-                     onLongPress={() => handleLongPress(item)}
-                     delayLongPress={300}
-                     activeOpacity={selectedDrug ? 1 : 0.8}
-                   >
+              <View style={styles.resultsSection}>
+                <View style={styles.resultsHeader}>
+                  <Text style={styles.resultsCount}>
+                    Found {results.length} results
+                  </Text>
+                </View>
+                {results.slice(0, 5).map((item) => (
+                  <TouchableOpacity
+                    key={item.id.toString()}
+                    style={[
+                      styles.resultItem,
+                      selectedDrug?.id === item.id && styles.selectedResultItem,
+                    ]}
+                    onPress={() => {
+                      if (selectedDrug) {
+                        closeMenu();
+                      } else {
+                        navigation.navigate('DrugDetail', { drug: item });
+                      }
+                    }}
+                    onLongPress={() => handleLongPress(item)}
+                    delayLongPress={300}
+                    activeOpacity={selectedDrug ? 1 : 0.7}
+                  >
                     <Text style={styles.resultName}>{item.trade_name}</Text>
                     <Text style={styles.resultIngredient}>
                       {item.active_ingredient}
@@ -303,61 +298,28 @@ export const DrugSearchScreen: React.FC<DrugSearchScreenProps> = ({
             </View>
           </>
         )}
-       </ScrollView>
+      </ScrollView>
 
-       {/* Blur Overlay and Action Menu */}
-       {selectedDrug && (
-         <Animated.View style={[
-           styles.overlay,
-           { opacity: blurAnim }
-         ]}>
-           <TouchableWithoutFeedback onPress={closeMenu}>
-             <View style={StyleSheet.absoluteFill} />
-           </TouchableWithoutFeedback>
-           
-           <View style={styles.menuContainer}>
-             <View style={styles.selectedCardPreview}>
-               <Text style={styles.previewName}>{selectedDrug.trade_name}</Text>
-               <Text style={styles.previewIngredient}>{selectedDrug.active_ingredient}</Text>
-             </View>
-
-             <TouchableOpacity
-               style={styles.menuItem}
-               onPress={() => {
-                 closeMenu();
-                 navigation.navigate('DrugAlternatives', { drug: selectedDrug, mode: 'similar' });
-               }}
-             >
-               <Text style={styles.menuItemText}>Similar</Text>
-               <Text style={styles.menuItemSubtext}>Same active ingredient</Text>
-             </TouchableOpacity>
-
-             <TouchableOpacity
-               style={styles.menuItem}
-               onPress={() => {
-                 closeMenu();
-                 navigation.navigate('DrugAlternatives', { drug: selectedDrug, mode: 'alternatives' });
-               }}
-             >
-               <Text style={styles.menuItemText}>Alternatives</Text>
-               <Text style={styles.menuItemSubtext}>Same function, different ingredient</Text>
-             </TouchableOpacity>
-
-             <TouchableOpacity
-               style={[styles.menuItem, styles.menuItemLast]}
-               onPress={() => {
-                 closeMenu();
-                 navigation.navigate('DrugDetail', { drug: selectedDrug });
-               }}
-             >
-               <Text style={styles.menuItemText}>Details</Text>
-               <Text style={styles.menuItemSubtext}>View full information</Text>
-             </TouchableOpacity>
-           </View>
-         </Animated.View>
-       )}
-     </SafeAreaView>
-   );
+      <DrugActionMenu
+        drug={selectedDrug}
+        visible={!!selectedDrug}
+        onClose={closeMenu}
+        blurAnim={blurAnim}
+        onSimilar={(drug) => {
+          closeMenu();
+          navigation.navigate('DrugAlternatives', { drug, mode: 'similar' });
+        }}
+        onAlternatives={(drug) => {
+          closeMenu();
+          navigation.navigate('DrugAlternatives', { drug, mode: 'alternatives' });
+        }}
+        onDetails={(drug) => {
+          closeMenu();
+          navigation.navigate('DrugDetail', { drug });
+        }}
+      />
+    </SafeAreaView>
+  );
 };
 
 const styles = StyleSheet.create({
@@ -371,6 +333,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: spacing.lg,
+    maxWidth: layout.maxWidth,
+    width: '100%',
+    alignSelf: 'center',
   },
   header: {
     marginBottom: spacing.xl,
@@ -386,10 +351,6 @@ const styles = StyleSheet.create({
   title: {
     ...typography.h1,
     marginBottom: spacing.sm,
-  },
-  subtitle: {
-    ...typography.body,
-    color: colors.neutral.gray,
   },
   dropdownContainer: {
     marginBottom: spacing.md,
@@ -427,7 +388,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border.light,
     borderRadius: borderRadius.lg,
     zIndex: 200,
-    elevation: 4,
     ...shadows.medium,
   },
   dropdownItem: {
@@ -482,17 +442,18 @@ const styles = StyleSheet.create({
   searchButtonText: {
     ...typography.button,
   },
-  errorContainer: {
+  errorBanner: {
     backgroundColor: colors.accent.red,
     marginBottom: spacing.md,
     padding: spacing.md,
     borderRadius: borderRadius.md,
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: colors.accent.red,
   },
   errorText: {
     ...typography.small,
     color: colors.neutral.white,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,
@@ -500,35 +461,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: spacing.xxl,
   },
-  resultsPreview: {
+  resultsSection: {
+    marginBottom: spacing.lg,
+  },
+  resultsHeader: {
     marginBottom: spacing.md,
   },
   resultsCount: {
     ...typography.body,
     fontWeight: '600',
-    marginBottom: spacing.md,
   },
   resultItem: {
     backgroundColor: colors.neutral.white,
     borderWidth: 3,
     borderColor: colors.border.light,
     borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
     ...shadows.medium,
   },
   resultName: {
     ...typography.h3,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
+    fontWeight: '700',
   },
   resultIngredient: {
-    ...typography.small,
+    ...typography.body,
     color: colors.neutral.gray,
+    lineHeight: 20,
   },
   resultMeta: {
     ...typography.small,
     color: colors.neutral.gray,
-    marginTop: 2,
+    marginTop: spacing.xs,
   },
   viewAllButton: {
     backgroundColor: colors.primary.green,
@@ -579,54 +544,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 0,
     zIndex: 100,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-    zIndex: 1000,
-  },
-  menuContainer: {
-    width: '100%',
-    backgroundColor: colors.neutral.white,
-    borderRadius: borderRadius.xl,
-    overflow: 'hidden',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-  },
-  selectedCardPreview: {
-    padding: spacing.lg,
-    backgroundColor: colors.primary.green,
-  },
-  previewName: {
-    ...typography.h2,
-    color: colors.neutral.white,
-    marginBottom: spacing.xs,
-  },
-  previewIngredient: {
-    ...typography.body,
-    color: colors.neutral.white,
-    opacity: 0.9,
-  },
-  menuItem: {
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
-  },
-  menuItemLast: {
-    borderBottomWidth: 0,
-  },
-  menuItemText: {
-    ...typography.h2,
-    marginBottom: spacing.xs,
-  },
-  menuItemSubtext: {
-    ...typography.body,
-    color: colors.neutral.gray,
   },
 });

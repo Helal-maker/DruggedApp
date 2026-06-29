@@ -10,13 +10,8 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
+import { RootStackParamList } from '../navigation/types';
 import { Drug, getSimilarDrugs, getAlternativeDrugs } from '../services/drugDatabase';
-
-type RootStackParamList = {
-  DrugSearchResults: { drugs: Drug[]; query: string };
-  DrugDetail: { drug: Drug };
-  DrugAlternatives: { drug: Drug; mode: 'similar' | 'alternatives' };
-};
 
 type DrugAlternativesScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'DrugAlternatives'>;
@@ -128,19 +123,21 @@ const styles = StyleSheet.create({
   drugCard: {
     backgroundColor: colors.neutral.white,
     borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
     borderWidth: 3,
     borderColor: colors.border.light,
     ...shadows.medium,
   },
   drugName: {
     ...typography.h2,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
+    fontWeight: '700',
   },
   drugIngredient: {
     ...typography.body,
     color: colors.neutral.gray,
+    lineHeight: 20,
   },
 
   emptyState: {

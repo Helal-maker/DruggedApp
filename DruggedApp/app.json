@@ -15,20 +15,19 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.DruggedApp",
+      "bundleIdentifier": "com.weeoperking.Drugged",
       "noCompress": [
         ".db"
       ]
     },
     "android": {
-      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.DruggedApp",
+      "package": "com.weeoperking.Drugged",
       "noCompress": [
         ".db"
       ]
